@@ -80,6 +80,8 @@ static hook_t g_hooks[] = {
     HOOK(ntdll, NtSetInformationFile),
     HOOK(ntdll, NtOpenDirectoryObject),
     HOOK(ntdll, NtCreateDirectoryObject),
+	HOOK(kernel32,GetFileAttributesA),
+	HOOK(kernel32, GetFileAttributesExA),
 
     // CreateDirectoryExA calls CreateDirectoryExW
     // CreateDirectoryW does not call CreateDirectoryExW

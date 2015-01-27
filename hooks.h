@@ -142,6 +142,16 @@ extern HOOKDEF(NTSTATUS, WINAPI, NtCreateDirectoryObject,
     __in   POBJECT_ATTRIBUTES ObjectAttributes
 );
 
+extern HOOKDEF(DWORD, WINAPI, GetFileAttributesA,
+	__in	LPCTSTR lpFileName
+	);
+
+extern HOOKDEF(DWORD, WINAPI, GetFileAttributesExA,
+	__in	LPCTSTR lpFileName,
+	__in	GET_FILEEX_INFO_LEVELS fInfoLevelId,
+	__out	LPVOID lpFileInformation
+	);
+
 extern HOOKDEF(BOOL, WINAPI, MoveFileWithProgressW,
     __in      LPWSTR lpExistingFileName,
     __in_opt  LPWSTR lpNewFileName,

@@ -445,6 +445,39 @@ HOOKDEF(NTSTATUS, WINAPI, NtCreateDirectoryObject,
     return ret;
 }
 
+HOOKDEF(DWORD, WINAPI, GetFileAttributesA,
+	__in	LPCTSTR lpFileName
+) {
+	BOOL ret;
+	if (strstr(lpFileName, "VBox") != NULL) {
+		ret = INVALID_FILE_ATTRIBUTES;
+		LOQ_nonzero("filesystem", "F", "Vbox Detection caught with GetFileAttributesEx", lpFileName);
+	}
+	else {
+		ret = Old_GetFileAttributesA(lpFileName);
+	}
+	LOQ_nonzero("filesystem", "GetFileAttributesA", lpFileName);
+	return ret;
+}
+
+HOOKDEF(DWORD, WINAPI, GetFileAttributesExA,
+	__in	LPCTSTR lpFileName,
+	__in	GET_FILEEX_INFO_LEVELS fInfoLevelId,
+	__out	LPVOID lpFileInformation
+) {
+	BOOL ret;
+	if (strstr(lpFileName, "VBox") != NULL) {
+		ret = 0;
+		LOQ_zero("filesystem", "F", "Vbox Detection caught with GetFileAttributesExA", lpFileName);
+	}
+	else {
+		ret = Old_GetFileAttributesA(lpFileName);
+	}
+	LOQ_nonzero("filesystem", "GetFileAttributesExA", lpFileName);
+	return ret;
+
+}
+
 HOOKDEF(BOOL, WINAPI, CreateDirectoryW,
     __in      LPWSTR lpPathName,
     __in_opt  LPSECURITY_ATTRIBUTES lpSecurityAttributes
