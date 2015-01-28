@@ -29,8 +29,23 @@ HOOKDEF(LONG, WINAPI, RegOpenKeyExA,
     __in        REGSAM samDesired,
     __out       PHKEY phkResult
 ) {
-    LONG ret = Old_RegOpenKeyExA(hKey, lpSubKey, ulOptions, samDesired,
-        phkResult);
+	LONG ret;
+	if (strstr(lpSubKey, "VirtualBox") != NULL)
+	{
+		ret = 1;
+		LOQ_nonzero("registry", "anti-vm", lpSubKey);
+	}
+	else if (strstr(lpSubKey, "ControlSet") != NULL)
+	{
+		ret = 1;
+		LOQ_nonzero("registry", "anti-vm", lpSubKey);
+	}
+	else
+	{
+		ret = Old_RegOpenKeyExA(hKey, lpSubKey, ulOptions, samDesired,
+			phkResult);
+	}
+ 
     LOQ_zero("registry", "psPe", "Registry", hKey, "SubKey", lpSubKey, "Handle", phkResult,
 		"FullName", hKey, lpSubKey);
     return ret;
@@ -266,31 +281,44 @@ HOOKDEF(LONG, WINAPI, RegQueryValueExA,
     __inout_opt  LPDWORD lpcbData
 ) {
 	ENSURE_DWORD(lpType);
-    LONG ret = Old_RegQueryValueExA(hKey, lpValueName, lpReserved, lpType,
-        lpData, lpcbData);
-    if(ret == ERROR_SUCCESS && lpType != NULL && lpData != NULL &&
-            lpcbData != NULL) {
-		unsigned int allocsize = sizeof(KEY_NAME_INFORMATION) + MAX_KEY_BUFLEN;
-		PKEY_NAME_INFORMATION keybuf = malloc(allocsize);
-		wchar_t *keypath = get_full_keyvalue_pathA(hKey, lpValueName, keybuf, allocsize);
-
-		LOQ_zero("registry", "psru", "Handle", hKey, "ValueName", lpValueName,
-			"Data", *lpType, *lpcbData, lpData,
-			"FullName", keypath);
-
-		// fake the vendor name
-		if (keypath && *lpcbData >= 13 && !wcsicmp(keypath, L"HKEY_LOCAL_MACHINE\\HARDWARE\\DEVICEMAP\\Scsi\\Scsi Port 0\\Scsi Bus 0\\Target Id 0\\Logical Unit Id 0\\Identifier") && !memcmp(lpData, "QEMU HARDDISK", 13)) {
-			memcpy(lpData, "DELL", 4);
-		}
-
-		free(keybuf);
+	LONG ret;
+	if (strstr(lpValueName, "SystemBiosVersion") != NULL)
+	{
+		ret = ERROR_SUCCESS;
+		LOQ_zero("registry", "ss", "Anti-VM",lpValueName);
 	}
-    else if (ret == ERROR_MORE_DATA) {
+	else if (strstr(lpValueName, "ProductId") != NULL)
+	{
+		ret = ERROR_SUCCESS;
+		LOQ_zero("registry", "ss", "Anti-VM",lpValueName);
+	}
+    /*else if (ret == ERROR_MORE_DATA) {
         LOQ_zero("registry", "psPIv", "Handle", hKey, "ValueName", lpValueName,
             "Type", lpType, "DataLength", lpcbData,
 			"FullName", hKey, lpValueName);
-	}
+	}*/
 	else {
+		ret = Old_RegQueryValueExA(hKey, lpValueName, lpReserved, lpType,
+			lpData, lpcbData);
+		if (ret == ERROR_SUCCESS && lpType != NULL && lpData != NULL &&
+			lpcbData != NULL)
+		{
+			unsigned int allocsize = sizeof(KEY_NAME_INFORMATION) + MAX_KEY_BUFLEN;
+			PKEY_NAME_INFORMATION keybuf = malloc(allocsize);
+			wchar_t *keypath = get_full_keyvalue_pathA(hKey, lpValueName, keybuf, allocsize);
+
+			LOQ_zero("registry", "psru", "Handle", hKey, "ValueName", lpValueName,
+				"Data", *lpType, *lpcbData, lpData,
+				"FullName", keypath);
+
+			// fake the vendor name for QEMU and VBOX
+			if (keypath && *lpcbData >= 13 &&
+				!wcsicmp(keypath, L"HKEY_LOCAL_MACHINE\\HARDWARE\\DEVICEMAP\\Scsi\\Scsi Port 0\\Scsi Bus 0\\Target Id 0\\Logical Unit Id 0\\Identifier") &&
+				(!memcmp(lpData, "QEMU HARDDISK", 13) || !memcmp(lpData, "VBOX", 4))){
+				memcpy(lpData, "DELL", 4);
+			}
+			free(keybuf);
+		}		
 		LOQ_zero("registry", "psv", "Handle", hKey, "ValueName", lpValueName,
 			"FullName", hKey, lpValueName);
 	}
