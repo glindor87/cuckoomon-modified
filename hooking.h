@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "ntapi.h"
-#include <Windows.h>
+#include <windows.h>
 
 enum {
 	UWOP_PUSH_NONVOL = 0,

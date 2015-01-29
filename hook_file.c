@@ -352,6 +352,8 @@ HOOKDEF(NTSTATUS, WINAPI, NtQueryDirectoryFile,
 	objattr.ObjectName = FileName;
 	objattr.RootDirectory = FileHandle;
 
+	//find if the Unicode String contains VBOX Additions strings
+
     NTSTATUS ret = Old_NtQueryDirectoryFile(FileHandle, Event,
         ApcRoutine, ApcContext, IoStatusBlock, FileInformation,
         Length, FileInformationClass, ReturnSingleEntry,

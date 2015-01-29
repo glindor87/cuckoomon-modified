@@ -33,12 +33,12 @@ HOOKDEF(LONG, WINAPI, RegOpenKeyExA,
 	if (strstr(lpSubKey, "VirtualBox") != NULL)
 	{
 		ret = 1;
-		LOQ_nonzero("registry", "anti-vm", lpSubKey);
+		LOQ_nonzero("registry", "s","anti-vm", lpSubKey);
 	}
 	else if (strstr(lpSubKey, "ControlSet") != NULL)
 	{
 		ret = 1;
-		LOQ_nonzero("registry", "anti-vm", lpSubKey);
+		LOQ_nonzero("registry", "s", "anti-vm", lpSubKey);
 	}
 	else
 	{
@@ -285,12 +285,12 @@ HOOKDEF(LONG, WINAPI, RegQueryValueExA,
 	if (strstr(lpValueName, "SystemBiosVersion") != NULL)
 	{
 		ret = ERROR_SUCCESS;
-		LOQ_zero("registry", "ss", "Anti-VM",lpValueName);
+		LOQ_zero("registry", "s", "Anti-VM",lpValueName);
 	}
 	else if (strstr(lpValueName, "ProductId") != NULL)
 	{
 		ret = ERROR_SUCCESS;
-		LOQ_zero("registry", "ss", "Anti-VM",lpValueName);
+		LOQ_zero("registry", "s", "Anti-VM",lpValueName);
 	}
     /*else if (ret == ERROR_MORE_DATA) {
         LOQ_zero("registry", "psPIv", "Handle", hKey, "ValueName", lpValueName,
