@@ -1,6 +1,6 @@
 /*
 Cuckoo Sandbox - Automated Malware Analysis
-Copyright (C) 2010-2014 Cuckoo Sandbox Developers
+Copyright (C) 2010-2015 Cuckoo Sandbox Developers, Accuvant, Inc. (bspengler@accuvant.com)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,41 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "ntapi.h"
 #include "hooking.h"
 #include "log.h"
+#include "pipe.h"
 
+static BOOLEAN servicename_from_handle(SC_HANDLE hService, PWCHAR servicename)
+{
+	lasterror_t lasterror;
+	DWORD byteneeded;
+	LPQUERY_SERVICE_CONFIGW servconfig = calloc(1, 0x2000);
+	BOOLEAN ret = FALSE;
+
+	if (servconfig == NULL) {
+		servicename[0] = L'\0';
+		return ret;
+	}
+	get_lasterrors(&lasterror);
+	// TODO: handle localized strings for Vista+
+	ret = QueryServiceConfigW(hService, servconfig, 0x2000, &byteneeded);
+
+	if (ret) {
+		SC_HANDLE scmhandle = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT | SC_MANAGER_ENUMERATE_SERVICE);
+		if (scmhandle != NULL) {
+			// appears to work just fine using the service's handle, but let's do it according to spec
+			ret = GetServiceKeyNameW(scmhandle, servconfig->lpDisplayName, servicename, &byteneeded);
+			CloseServiceHandle(scmhandle);
+		}
+		else {
+			ret = FALSE;
+		}
+	}
+	if (!ret)
+		servicename[0] = L'\0';
+
+	set_lasterrors(&lasterror);
+
+	return ret;
+}
 
 HOOKDEF(SC_HANDLE, WINAPI, OpenSCManagerA,
     __in_opt  LPCTSTR lpMachineName,
@@ -62,7 +96,7 @@ HOOKDEF(SC_HANDLE, WINAPI, CreateServiceA,
     __in_opt   LPCSTR lpPassword
 ) {
     SC_HANDLE ret = Old_CreateServiceA(hSCManager, lpServiceName,
-        lpDisplayName, dwDesiredAccess, dwServiceType, dwStartType,
+		lpDisplayName, dwDesiredAccess | SERVICE_QUERY_CONFIG, dwServiceType, dwStartType,
         dwErrorControl, lpBinaryPathName, lpLoadOrderGroup, lpdwTagId,
         lpDependencies, lpServiceStartName, lpPassword);
 	LOQ_nonnull("services", "pssh3i3s", "ServiceControlHandle", hSCManager,
@@ -92,7 +126,7 @@ HOOKDEF(SC_HANDLE, WINAPI, CreateServiceW,
     __in_opt   LPWSTR lpPassword
 ) {
     SC_HANDLE ret = Old_CreateServiceW(hSCManager, lpServiceName,
-        lpDisplayName, dwDesiredAccess, dwServiceType, dwStartType,
+        lpDisplayName, dwDesiredAccess | SERVICE_QUERY_CONFIG, dwServiceType, dwStartType,
         dwErrorControl, lpBinaryPathName, lpLoadOrderGroup, lpdwTagId,
         lpDependencies, lpServiceStartName, lpPassword);
     LOQ_nonnull("services", "puuh3i3u", "ServiceControlHandle", hSCManager,
@@ -110,8 +144,15 @@ HOOKDEF(SC_HANDLE, WINAPI, OpenServiceA,
     __in  LPCTSTR lpServiceName,
     __in  DWORD dwDesiredAccess
 ) {
-    SC_HANDLE ret = Old_OpenServiceA(hSCManager, lpServiceName,
-        dwDesiredAccess);
+	lasterror_t lasterror;
+	SC_HANDLE ret;
+	get_lasterrors(&lasterror);
+	ret = Old_OpenServiceA(hSCManager, lpServiceName,
+		dwDesiredAccess | SERVICE_QUERY_CONFIG);
+	if (ret != NULL)
+		set_lasterrors(&lasterror);
+	else
+		ret = Old_OpenServiceA(hSCManager, lpServiceName, dwDesiredAccess);
     LOQ_nonnull("services", "psh", "ServiceControlManager", hSCManager,
         "ServiceName", lpServiceName, "DesiredAccess", dwDesiredAccess);
     return ret;
@@ -122,8 +163,16 @@ HOOKDEF(SC_HANDLE, WINAPI, OpenServiceW,
     __in  LPWSTR lpServiceName,
     __in  DWORD dwDesiredAccess
 ) {
-    SC_HANDLE ret = Old_OpenServiceW(hSCManager, lpServiceName,
-        dwDesiredAccess);
+	lasterror_t lasterror;
+	SC_HANDLE ret;
+	get_lasterrors(&lasterror);
+	ret = Old_OpenServiceW(hSCManager, lpServiceName,
+		dwDesiredAccess | SERVICE_QUERY_CONFIG);
+	if (ret != NULL)
+		set_lasterrors(&lasterror);
+	else
+		ret = Old_OpenServiceW(hSCManager, lpServiceName, dwDesiredAccess);
+
     LOQ_nonnull("services", "puh", "ServiceControlManager", hSCManager,
         "ServiceName", lpServiceName, "DesiredAccess", dwDesiredAccess);
     return ret;
@@ -134,10 +183,15 @@ HOOKDEF(BOOL, WINAPI, StartServiceA,
     __in      DWORD dwNumServiceArgs,
     __in_opt  LPCTSTR *lpServiceArgVectors
 ) {
-    BOOL ret = Old_StartServiceA(hService, dwNumServiceArgs,
+	PWCHAR servicename = calloc(1, 0x1000);
+	BOOLEAN dispret = servicename_from_handle(hService, servicename);
+	if (dispret)
+		pipe("SERVICE:%Z", servicename);
+	BOOL ret = Old_StartServiceA(hService, dwNumServiceArgs,
         lpServiceArgVectors);
-    LOQ_bool("services", "pa", "ServiceHandle", hService, "Arguments", dwNumServiceArgs,
+    LOQ_bool("services", "pua", "ServiceHandle", hService, "ServiceName", servicename, "Arguments", dwNumServiceArgs,
         lpServiceArgVectors);
+	free(servicename);
     return ret;
 }
 
@@ -146,10 +200,15 @@ HOOKDEF(BOOL, WINAPI, StartServiceW,
     __in      DWORD dwNumServiceArgs,
     __in_opt  LPWSTR *lpServiceArgVectors
 ) {
+	PWCHAR servicename = calloc(1, 0x1000);
+	BOOLEAN dispret = servicename_from_handle(hService, servicename);
+	if (dispret)
+		pipe("SERVICE:%Z", servicename);
     BOOL ret = Old_StartServiceW(hService, dwNumServiceArgs,
         lpServiceArgVectors);
-    LOQ_bool("services", "pA", "ServiceHandle", hService, "Arguments", dwNumServiceArgs,
+    LOQ_bool("services", "puA", "ServiceHandle", hService, "ServiceName", servicename, "Arguments", dwNumServiceArgs,
         lpServiceArgVectors);
+	free(servicename);
     return ret;
 }
 
@@ -158,15 +217,21 @@ HOOKDEF(BOOL, WINAPI, ControlService,
     __in   DWORD dwControl,
     __out  LPSERVICE_STATUS lpServiceStatus
 ) {
-    BOOL ret = Old_ControlService(hService, dwControl, lpServiceStatus);
-    LOQ_bool("services", "pi", "ServiceHandle", hService, "ControlCode", dwControl);
+	PWCHAR servicename = calloc(1, 0x1000);
+	servicename_from_handle(hService, servicename);
+	BOOL ret = Old_ControlService(hService, dwControl, lpServiceStatus);
+    LOQ_bool("services", "pui", "ServiceHandle", hService, "ServiceName", servicename, "ControlCode", dwControl);
+	free(servicename);
     return ret;
 }
 
 HOOKDEF(BOOL, WINAPI, DeleteService,
     __in  SC_HANDLE hService
 ) {
-    BOOL ret = Old_DeleteService(hService);
-    LOQ_bool("services", "p", "ServiceHandle", hService);
+	PWCHAR servicename = calloc(1, 0x1000);
+	servicename_from_handle(hService, servicename);
+	BOOL ret = Old_DeleteService(hService);
+    LOQ_bool("services", "pu", "ServiceHandle", hService, "ServiceName", servicename);
+	free(servicename);
     return ret;
 }
